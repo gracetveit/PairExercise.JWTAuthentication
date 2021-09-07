@@ -1,5 +1,8 @@
 const Sequelize = require("sequelize");
-const jsonwebtoken = require("jsonwebtoken")
+const jsonwebtoken = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+
+require("dotenv").config();
 const { STRING } = Sequelize;
 const config = {
   logging: false,
@@ -21,7 +24,7 @@ const User = conn.define("user", {
 
 User.byToken = async (token) => {
   try {
-    const userid = jsonwebtoken.verify(token, process.env.jwt)
+    const userid = jsonwebtoken.verify(token, process.env.jwt);
     const user = await User.findByPk(userid);
     if (user) {
       return user;
@@ -40,16 +43,22 @@ User.authenticate = async ({ username, password }) => {
   const user = await User.findOne({
     where: {
       username,
-      password,
     },
   });
-  if (user) {
-    return jsonwebtoken.sign(user.id, process.env.jwt)
+  const correctPassword = await bcrypt.compare(password, user.password);
+
+  if (user && correctPassword) {
+    return jsonwebtoken.sign(user.id, process.env.jwt);
   }
   const error = Error("bad credentials");
   error.status = 401;
   throw error;
 };
+
+User.beforeCreate(async (user) => {
+  const hashedPassword = await bcrypt.hash(user.password, 10);
+  user.password = hashedPassword;
+});
 
 const syncAndSeed = async () => {
   await conn.sync({ force: true });
